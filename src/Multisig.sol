@@ -2,6 +2,7 @@
 pragma solidity ^0.8.0;
 
 // ability to console log within smart contracts
+
 import "./PriceConverter.sol";
 import "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 import "./NFTMinter.sol";
@@ -10,59 +11,58 @@ interface INFTMinter {
     function mint(address recipient, uint256 _tokenId, string memory _tokenURI) external;
 }
 
-contract Multisig {
+contract HackathonCompany {
     using PriceConverter for uint256;
 
     address nftMinterAddress;
 
-    event NewOwner(
-        address indexed owner,
+    event NewJudge(
+        address indexed judge,
         uint256 depositAmount,
         uint256 contractBalance
     );
 
     event SubmitTransactionProposal(
-        address indexed owner,
+        address indexed judge,
         uint256 indexed txIndex,
         address indexed to,
         uint256 value,
         string data
     );
 
-    event ApproveTransactionPropasal(
-        address indexed owner,
+    event ApproveTransactionProposal(
+        address indexed judge,
         uint256 indexed txIndex
     );
 
-    event RevokeApproval(address indexed owner, uint256 indexed txIndex);
+    event RevokeApproval(address indexed judge, uint256 indexed txIndex);
 
-    event ExecuteTransaction(address indexed owner, uint256 indexed txIndex);
+    event ExecuteTransaction(address indexed judge, uint256 indexed txIndex);
 
-    // array of addresses of owners. Do we need it? It will cost more gas
-    address[] public owners;
-    // maps addresses as owner
-    mapping(address => bool) public isOwner;
-    // whitelist for new members to be added as owner. Do we need it? It will cost more gas so use a mapping?
-    // address[] public newMembers;
-    mapping(address => bool) public isNewMember;
+    // array of addresses of judges
+    address[] public judges;
+    // maps addresses as judge
+    mapping(address => bool) public isJudge;
+    // whitelist for new judges to be added
+    mapping(address => bool) public isNewJudge;
     // number of Approvals required for invoking a transaction
     uint256 public numApprovalsRequired;
 
-    // society name
-    string public societyName;
-    // intial deposit to join society and become an owner
+    // hackathon name
+    string public hackathonName;
+    // initial deposit to join hackathon and become a judge
     uint256 public deposit;
 
     // chainlink pricefeed
     AggregatorV3Interface public s_priceFeed;
     
-    // struct for intiating a transaction to pay for a service
-    struct ServiceTransaction {
+    // struct for initiating a transaction to pay for a hackathon service
+    struct HackathonTransaction {
         // transaction Id
         uint256 tokenId;
-        // address to be paid
+        // address to be awarded
         address to;
-        // amount to be paid
+        // amount to be awarded
         uint256 amount;
         // description of transaction
         string data;
@@ -72,133 +72,122 @@ contract Multisig {
         uint256 numApprovals;
     }
 
-    // array to store service transactions
-    ServiceTransaction[] public serviceTransactions;
+    // array to store hackathon transactions
+    HackathonTransaction[] public hackathonTransactions;
 
-    // maps transaction index to transactions
-    // mapping(uint256 => ServiceTransaction) serviceTransactionsMaps;
-
-    // mapping to check if owner has provided Approval for a txn index
+    // mapping to check if judge has provided Approval for a txn index
     mapping(uint256 => mapping(address => bool)) public isApproved;
 
     mapping(address => uint256) public balances;
 
-    // modifier to check for owner
-    modifier onlyOwner() {
-        require(isOwner[msg.sender], "not owner");
+    // modifier to check for judge
+    modifier onlyJudge() {
+        require(isJudge[msg.sender], "not judge");
         _;
     }
 
-    // functions to check is txn proposal exists
+    // functions to check if txn proposal exists
     modifier txExists(uint256 _txIndex) {
-        require(_txIndex < serviceTransactions.length, "tx does not exist");
+        require(_txIndex < hackathonTransactions.length, "tx does not exist");
         _;
     }
 
     // Check if proposal/ payment has already been executed
     modifier notExecuted(uint256 _txIndex) {
-        require(!serviceTransactions[_txIndex].executed, "tx already executed");
+        require(!hackathonTransactions[_txIndex].executed, "tx already executed");
         _;
     }
 
-    // check if the owner has already submitted Approval
+    // check if the judge has already submitted Approval
     modifier notApproved(uint256 _txIndex) {
         require(!isApproved[_txIndex][msg.sender], "tx is already approved");
         _;
     }
 
     // called whenever new instance is deployed first time
-
     constructor(
-        string memory _societyName,
-        uint256 _deposit, //uint that represents usd
+        string memory _hackathonName,
+        uint256 _deposit, // uint that represents USD
         address _owner,
         address _priceFeed
     ) {
-        isNewMember[_owner] = true;
-        societyName = _societyName;
+        isNewJudge[_owner] = true;
+        hackathonName = _hackathonName;
         s_priceFeed = AggregatorV3Interface(_priceFeed);
-        // superowner to pay the deposit
         deposit = _deposit;
     }
 
-    // function to add new member to whitelist
-    function addNewMember(address _newMember) external onlyOwner {
-        isNewMember[_newMember] = true;
+    // function to add new judge to whitelist
+    function addNewJudge(address _newJudge) external onlyJudge {
+        isNewJudge[_newJudge] = true;
     }
 
     // Function to receive Ether. msg.data must be empty
     receive() external payable {}
 
-    // add new member as owner after receving deposit
-    function newOwner() payable public {
+    // add new judge after receiving deposit
+    function newJudge() payable public {
         require(
-            isNewMember[msg.sender],
-            "You are not a new member. You cannot interact with this function."
+            isNewJudge[msg.sender],
+            "You are not a new judge. You cannot interact with this function."
         );
         // check if person has enough funds
         require(
             msg.value >= deposit.getConversionRate(s_priceFeed),
-            "Insufficient balance to become owner, please send more"
+            "Insufficient balance to become judge, please send more"
         );
         
-        isNewMember[msg.sender] = false;
-        // add member to the list of owners
+        isNewJudge[msg.sender] = false;
         balances[msg.sender] += msg.value;
-        owners.push(msg.sender);
-        // add new oner to the owner mapping
-        isOwner[msg.sender] = true;
-        // console log balance of new multisig contract
-        console.log(getMultisigBalance());
+        judges.push(msg.sender);
+        isJudge[msg.sender] = true;
+        console.log(getHackathonBalance());
 
-        // redefining number of approvals required to 100% of owners
-        numApprovalsRequired = owners.length;
+        // redefining number of approvals required to 100% of judges
+        numApprovalsRequired = judges.length;
         console.log(numApprovalsRequired);
 
-        emit NewOwner(msg.sender, deposit, address(this).balance);
+        emit NewJudge(msg.sender, deposit, address(this).balance);
     }
 
-    function depositIntoContract() public payable onlyOwner  {
+    function depositIntoContract() public payable onlyJudge {
         require(msg.value > 0, "Deposit needs to be larger than 0");
         balances[msg.sender] += msg.value;
     }
 
-    function withdraw() public onlyOwner {
+    function withdraw() public onlyJudge {
         require(balances[msg.sender] > 0, "Nothing to withdraw");
         (bool success, ) = payable(msg.sender).call{value: balances[msg.sender]}("");
         require(success, "Withdraw: Failed to send matic to user");
-        isOwner[msg.sender] = false;
+        isJudge[msg.sender] = false;
         balances[msg.sender] = 0;
-        for (uint i = 0; i < owners.length - 1; i++) {
-            if (owners[i] == msg.sender) {
-                removeFromOwners(i);
+        for (uint i = 0; i < judges.length - 1; i++) {
+            if (judges[i] == msg.sender) {
+                removeFromJudges(i);
                 break;
             }
         }
-        numApprovalsRequired = owners.length;
+        numApprovalsRequired = judges.length;
     }
-    
-    function removeFromOwners(uint index) public {
-        delete owners[index];
-        // Move the last element into the place to delete
-        owners[index] = owners[owners.length - 1];
-        // Remove the last element
-        owners.pop();
+
+    function removeFromJudges(uint index) public {
+        delete judges[index];
+        judges[index] = judges[judges.length - 1];
+        judges.pop();
     }
-    
-    // function to request payment for service
+
+    // function to request payment for hackathon prize or award
     function submitTransactionProposal(
         address _to,
         uint256 _amount,
         string memory _data
-    ) public onlyOwner {
-        uint256 txIndex = serviceTransactions.length;
+    ) public onlyJudge {
+        uint256 txIndex = hackathonTransactions.length;
 
-        serviceTransactions.push(
-            ServiceTransaction({
+        hackathonTransactions.push(
+            HackathonTransaction({
                 tokenId: txIndex,
                 to: _to,
-                // amount: _amount * 10 ** 18,
                 amount: _amount,
                 data: _data,
                 executed: false,
@@ -206,7 +195,6 @@ contract Multisig {
             })
         );
 
-        // emit event when a request for transaction service is submitted
         emit SubmitTransactionProposal(
             msg.sender,
             txIndex,
@@ -216,62 +204,59 @@ contract Multisig {
         );
     }
 
-    // function for owners to approve transaction
-    // check if service transaction request exists, if payment for same has been made
-    // and if owner has already approved
+    // function for judges to approve transaction
     function approveTransactionProposal(uint256 _txIndex)
         public
-        onlyOwner
+        onlyJudge
         txExists(_txIndex)
         notExecuted(_txIndex)
         notApproved(_txIndex)
     {
-        // calls txn details from array
-        ServiceTransaction storage serviceTransaction = serviceTransactions[
+        HackathonTransaction storage hackathonTransaction = hackathonTransactions[
             _txIndex
         ];
 
         isApproved[_txIndex][msg.sender] = true;
-        serviceTransaction.numApprovals++;
+        hackathonTransaction.numApprovals++;
 
-        emit ApproveTransactionPropasal(msg.sender, _txIndex);
+        emit ApproveTransactionProposal(msg.sender, _txIndex);
     }
 
     function revokeApproval(uint256 _txIndex)
         public
-        onlyOwner
+        onlyJudge
         txExists(_txIndex)
         notExecuted(_txIndex)
     {
-        ServiceTransaction storage serviceTransaction = serviceTransactions[
+        HackathonTransaction storage hackathonTransaction = hackathonTransactions[
             _txIndex
         ];
 
         require(isApproved[_txIndex][msg.sender], "tx not confirmed");
 
         isApproved[_txIndex][msg.sender] = false;
-        serviceTransaction.numApprovals--;
+        hackathonTransaction.numApprovals--;
 
         emit RevokeApproval(msg.sender, _txIndex);
     }
 
     function executeTransaction(uint256 _txIndex)
         public
-        onlyOwner
+        onlyJudge
         txExists(_txIndex)
         notExecuted(_txIndex)
     {
-        ServiceTransaction storage serviceTransaction = serviceTransactions[
+        HackathonTransaction storage hackathonTransaction = hackathonTransactions[
             _txIndex
         ];
 
         require(
-            serviceTransaction.numApprovals >= numApprovalsRequired,
+            hackathonTransaction.numApprovals >= numApprovalsRequired,
             "Not enough approvals to execute transaction"
         );
-        (bool success, ) = payable(serviceTransaction.to).call{value: serviceTransaction.amount.getConversionRate(s_priceFeed)}("");
+        (bool success, ) = payable(hackathonTransaction.to).call{value: hackathonTransaction.amount.getConversionRate(s_priceFeed)}("");
         require(success, "Transaction failed");
-        serviceTransaction.executed = true;
+        hackathonTransaction.executed = true;
 
         emit ExecuteTransaction(msg.sender, _txIndex);
     }
@@ -282,18 +267,17 @@ contract Multisig {
 
     function mintTransactionAsNFT(uint256 _txIndex, string memory _uri) 
     public
-    onlyOwner
+    onlyJudge
     txExists(_txIndex)
     {
         INFTMinter(nftMinterAddress).mint(address(this), _txIndex, _uri);
     }
 
-    // function to get owners
-    function getOwners() public view returns (address[] memory) {
-        return owners;
+    function getJudges() public view returns (address[] memory) {
+        return judges;
     }
 
-    function getMultisigBalance() public view returns (uint) {
+    function getHackathonBalance() public view returns (uint) {
         return address(this).balance;
     }
     
@@ -305,7 +289,7 @@ contract Multisig {
         return _amount.getConversionRate(s_priceFeed);
     }
 
-    function getServiceTransactions() public view returns (ServiceTransaction[] memory) {
-        return serviceTransactions;
+    function getHackathonTransactions() public view returns (HackathonTransaction[] memory) {
+        return hackathonTransactions;
     }
 }
