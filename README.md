@@ -1,14 +1,18 @@
 # Multisig Contract
 
-![interface](https://hackmd.io/_uploads/HJxh8ceE1e.png)
+Smart contract architecture.
 
-![multisig](https://hackmd.io/_uploads/HyzaI9eN1g.png)
+![interface](./interface.png)
 
-![multisigfactory](https://hackmd.io/_uploads/ryNCIclVJg.png)
+![multisig](./multisig.png)
 
-![nftminter](https://hackmd.io/_uploads/BJ_1P9eVke.png)
+![multisigfactory](./multisigfactory.png)
 
-![priceconverter](https://hackmd.io/_uploads/H1z-vqgEkg.png)
+![nftminter](./nftminter.png)
+
+![priceconverter](./priceconverter.png)
+
+## Frontend
 
 ## Foundry
 
